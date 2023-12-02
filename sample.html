@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sample</title>
+    <meta name="description" content="">
+    <meta name="keywords" content="">
+
+    <!-- Include Bootstrap 4 CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
+    <!-- Include Pikaday JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pikaday/1.8.0/pikaday.min.js"></script>
+
+        <!-- Include Flatpickr CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+    <!-- Include Flatpickr JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+
+
+
+
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-analytics.js";
+        import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-database.js";
+        import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
+
+        import Toastify from "https://cdn.skypack.dev/toastify-js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZobHsDbEvbkIW--GlIVWQ9aZhcCfnES0",
+            authDomain: "zuena-32eb8.firebaseapp.com",
+            databaseURL: "https://zuena-32eb8-default-rtdb.firebaseio.com",
+            projectId: "zuena-32eb8",
+            storageBucket: "zuena-32eb8.appspot.com",
+            messagingSenderId: "445845303570",
+            appId: "1:445845303570:web:8bd530331b64db740b03cb",
+            measurementId: "G-LVY30CE382"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const database = getDatabase(app);
+        const auth = getAuth();
+
+        const save = document.getElementById("save");
+
+        save.addEventListener("click", async (e) => {
+            try {
+                const selectedCategory = document.getElementById('selectOptions').value;
+                const description = document.getElementById('description').value;
+                const dateTime = document.getElementById('datePicker').value;
+                const time = document.getElementById('timePicker').value;
+                const remind = document.querySelector('input[name="reminderRadio"]:checked').value;
+
+                // Get the UID of the authenticated user
+                const userId = auth.currentUser.uid;
+
+                const newTask = {
+                    category: selectedCategory,
+                    description: description,
+                    dateTime: dateTime,
+                    time: time,
+                    remind: remind
+                };
+
+                // Get a reference to the database path based on the selected category and the user's UID
+                const tasksRef = ref(database, `Tasks/${userId}/${selectedCategory}`);
+
+                // Push the new task to the database
+                const newTaskRef = push(tasksRef);
+                await set(newTaskRef, newTask);
+
+                // Show a success Toast notification
+                Toastify({
+                    text: "Task saved successfully!",
+                    duration: 3000,
+                    close: true,
+                    gravity: "bottom",
+                    position: "right",
+                    backgroundColor: "green",
+                }).showToast();
+
+                // Clear the form after successful save
+                const save = document.getElementById("taskForm");
+                save.reset();
+            } catch (error) {
+                // Show an error Toast notification
+                Toastify({
+                    text: error.message,
+                    duration: 3000,
+                    close: true,
+                    gravity: "bottom",
+                    position: "right",
+                    backgroundColor: "red",
+                }).showToast();
+            }
+        });
+
+
+        // Function to display tasks in a table
+        function displayTasks(tasks, tableId) {
+            const tableBody = document.getElementById(tableId);
+
+            // Clear previous entries in the table
+            tableBody.innerHTML = "";
+
+            // Iterate through each task and create a table row
+            tasks.forEach((task) => {
+                const row = tableBody.insertRow();
+
+                // Add cells to the row
+                const categoryCell = row.insertCell(0);
+                const descriptionCell = row.insertCell(1);
+                const dateTimeCell = row.insertCell(2);
+                const timeCell = row.insertCell(3);
+                const remindCell = row.insertCell(4);
+
+                // Populate cells with task data
+                categoryCell.textContent = task.category;
+                descriptionCell.textContent = task.description;
+                dateTimeCell.textContent = task.dateTime;
+                timeCell.textContent = task.time;
+                remindCell.textContent = task.remind;
+            });
+        }
+
+        // Function to filter tasks for today
+        function filterTodayTasks(tasks) {
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0); // Set time to midnight for accurate date comparison
+            return tasks.filter(task => {
+                const taskDate = new Date(task.dateTime);
+                taskDate.setHours(0, 0, 0, 0); // Set time to midnight for accurate date comparison
+                return taskDate.getTime() === todayDate.getTime();
+            });
+        }
+
+        // Function to display today's tasks in the "Today's Table"
+        function displayTodayTasks(todayTasks) {
+            displayTasks(todayTasks, "todaysTaskTableBody");
+        }
+
+        // Function to fetch and display all tasks excluding today's tasks
+        function fetchAndDisplayAllTasks(selectedCategory) {
+            const user = auth.currentUser;
+
+            if (user) {
+                const tasksRef = ref(database, `Tasks/${user.uid}/${selectedCategory}`);
+
+                // Listen for changes in the data
+                onValue(tasksRef, (snapshot) => {
+                    const data = snapshot.val();
+
+                    if (data) {
+                        // Convert the data to an array of tasks
+                        const tasks = Object.values(data);
+
+                        // Filter out today's tasks
+                        const todayTasks = filterTodayTasks(tasks);
+                        const futureTasks = tasks.filter(task => !todayTasks.includes(task));
+
+                        // Display all tasks in the main table
+                        displayTasks(futureTasks, "taskTableBody");
+
+                        // Display today's tasks in the "Today's Table"
+                        displayTodayTasks(todayTasks);
+                    }
+                });
+            } else {
+                console.error("User is not authenticated.");
+            }
+        }
+
+
+        // Initial call to display tasks for the "Personal" category
+        fetchAndDisplayAllTasks('personal');
+        // Event listener for the "Personal" link
+        const personalLink = document.getElementById("personalLink");
+        personalLink.addEventListener("click", () => {
+            const selectedCategory = 'personal';
+            fetchAndDisplayAllTasks(selectedCategory);
+        });
+
+        // Event listener for the "health" link
+        const healthLink = document.getElementById("healthLink");
+        healthLink.addEventListener("click", () => {
+            const selectedCategory = 'health';
+            fetchAndDisplayAllTasks(selectedCategory);
+        });
+
+        // Event listener for the "health" link
+        const workLink = document.getElementById("workLink");
+        workLink.addEventListener("click", () => {
+            const selectedCategory = 'work';
+            fetchAndDisplayAllTasks(selectedCategory);
+        });
+    </script>
+
+
+
+
+
+
+    <!-- Include additional dependencies for the time picker -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.7.14/css/bootstrap-datetimepicker.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.15.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js" integrity="sha512-42PE0rd+wZ2hNXftlM78BSehIGzezNeQuzihiBCvUEB3CVxHvsShF86wBWwQORNxNINlBPuq7rG4WWhNiTVHFg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.7.14/js/bootstrap-datetimepicker.min.js"></script>
+    <!-- Include Pikaday CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pikaday/1.8.0/css/pikaday.min.css">
+
+    <!-- Include your custom styles -->
+    <style>
+        #sidebarWrapper {
+            height: 70vh;
+        }
+
+        .navbar {
+            height: 80px;
+        }
+
+        .logo {
+            width: 60px;
+        }
+
+        .custom-form-container {
+            background-color: #87CEEB;
+            padding: 20px;
+            border-radius: 10px;
+            width: 390px;
+            height: 500px;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none; /* Set the form to be initially hidden */
+            z-index: 1000; /* Ensure it's above other elements */
+        }
+
+        .datepicker-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .datepicker-calendar {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            display: none;
+            z-index: 999;
+        }
+
+        #datePicker {
+            width: 50px;
+        }
+
+        .input-group {
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Top Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light custom-navbar">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <img src="assets/img/bell1.png" alt="Your Logo" class="logo">
+            </a>
+
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbar">
+                <ul class="navbar-nav ml-auto">
+                    <li class="nav-item">
+                        <a class="nav-link scrollto active" href="index.html">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link scrollto" href="about.html">About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link scrollto" href="portfolio.html">Portfolio</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link scrollto" href="contact.html">Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Container for Top Section (Form and Vertical Navigation) -->
+    <div class="container mt-4">
+        <div class="row">
+            <!-- Vertical Left Navigation Bar -->
+            <nav id="sidebarWrapper" class="col-md-2 mb-1S d-none d-md-block bg-light sidebar">
+                <div class="position-sticky">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link  fw-bold mb-4">
+                                <i class="bi bi-person-fill-add"></i> Navigation Links
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link nav-link-add-entries fw-bold mb-4" href="#">
+                                <i class="bi bi-calendar-plus-fill"></i> Add Entries
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link fw-bold mb-4" id="personalLink" href="#">
+                                <i class="bi bi-person-arms-up"></i> Personal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link fw-bold mb-4" id="workLink" href="#">
+                                <i class="bi bi-pc-display"></i> Work
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link fw-bold mb-4" id="healthLink" href="#">
+                                <i class="bi bi-prescription2"></i> Health
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Tables Container -->
+            <div class="col-md-10">
+                <!-- Your tables go here -->
+                <h2>Today's Tasks</h2>
+                <table class="table table-sm table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th scope="col">Category</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Time</th>
+                            <th scope="col">Remind?</th>
+                        </tr>
+                    </thead>
+                    <tbody id="todaysTaskTableBody">
+                        <!-- Today's tasks will be dynamically added here -->
+                    </tbody>
+                </table>
+
+                <h2>Other Tasks</h2>
+                <table class="table table-sm table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th scope="col">Category</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Time</th>
+                            <th scope="col">Remind?</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody">
+                        <!-- Tasks will be dynamically added here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Form Integration -->
+        <div class="col-md-8 ml-4">
+            <div class="container custom-form-container" id="formContainer">
+                <form id="taskForm">
+                    <div class="form-group">
+                        <label for="selectOptions">Select Categories</label>
+                        <select class="form-control" id="selectOptions">
+                            <option value="personal">Personal</option>
+                            <option value="health">Health</option>
+                            <option value="work">Work</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">Describe the task</label>
+                        <textarea class="form-control" id="description" rows="2"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Date and Time</label>
+                        <div class="input-group">
+                            <!-- Reduce the width of the date picker -->
+                            <input type="text" class="form-control" id="datePicker" placeholder="pick date...">
+                            <!-- Add some space between date and time pickers -->
+                            <div style="width: 10px;"></div>
+                            <!-- Add the time picker to the right of the date picker -->
+                            <input type="text" class="form-control" id="timePicker" placeholder="pick time...">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Remind?</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="reminderRadio" id="remindRadio" value="Yes" checked>
+                            <label class="form-check-label" for="remindRadio">Yes</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="reminderRadio" id="dontRemindRadio" value="No">
+                            <label class="form-check-label" for="dontRemindRadio">No</label>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary" id="save">Save</button>
+                </form>
+            </div>
+        </div>
+
+
+
+    </div>
+
+    
+    <!-- ... (your other scripts) ... -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+
+    <!-- Include Pikaday CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pikaday/1.8.0/css/pikaday.min.css">
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Get the current date
+            var currentDate = new Date();
+    
+            // Initialize date picker
+            flatpickr("#datePicker", {
+                dateFormat: 'Y-m-d',
+                minDate: currentDate, // Set the minimum selectable date to the current date
+            });
+    
+            // Initialize time picker
+            flatpickr("#timePicker", {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: 'H:i',
+                time_24hr: true,
+                minuteIncrement: 15,
+            });
+        });
+    </script>
+
+
+    <script>
+        $(function () {
+            // Toggle form visibility on "Add Entries" link click
+            $('.nav-link-add-entries').on('click', function () {
+                $('#formContainer').toggle();
+            });
+
+        });
+    </script>
+
+</body>
+
+</html>
